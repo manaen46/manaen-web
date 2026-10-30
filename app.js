@@ -751,16 +751,33 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
       }
       const system = buildSystem(excerpts, voiceMode);
       const tools = buildTools();
+      // L'historique d'avant est figé pour tout le tour : le cerveau exige qu'il ne change pas
+      // pendant qu'il enchaîne ses étapes (outils, réflexion).
+      const prefix = windowMessages(conv.api);
       let guard = 0;
+      let restarted = false;
       while (guard++ < 10) {
         if (cancelled) break;
-        const res = await callClaude({
-          model: Settings.data.model,
-          max_tokens: 32000,
-          system: system,
-          tools: tools,
-          messages: windowMessages(conv.api)
-        });
+        let res;
+        try {
+          res = await callClaude({
+            model: Settings.data.model,
+            max_tokens: 32000,
+            system: system,
+            tools: tools,
+            messages: prefix.concat(conv.api.slice(userApiIndex + 1))
+          });
+        } catch (err) {
+          // Sécurité : si le cerveau refuse ses propres blocs de réflexion, on recommence le tour proprement une fois
+          if (!restarted && err.status === 400 && /thinking|signature/i.test(err.message)) {
+            restarted = true;
+            conv.api.splice(userApiIndex + 1);
+            turn.texts = []; turn.sources = [];
+            status.set('Manaen reprend sa réflexion…');
+            continue;
+          }
+          throw err;
+        }
         if (cancelled) break;
         conv.api.push({ role: 'assistant', content: res.content });
         res.content.forEach((b) => {
