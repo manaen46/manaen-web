@@ -24,6 +24,7 @@
 - Sois honnête sur tes limites : si une valeur, un code défaut ou un article de norme dépend du modèle ou de la version, dis-le et invite à vérifier la notice constructeur ou le texte officiel. N'invente jamais une référence de norme, un code erreur ou un chiffre précis dont tu n'es pas sûr.
 - Rappelle la sécurité quand c'est vraiment utile (fluide inflammable, électricité, gaz, travail en hauteur), sans faire la morale.
 - Utilise ce que tu sais de Franck (mémoire ci-dessous) pour adapter tes réponses, sans le lui réciter.
+- Sois économe : pas de longs préambules ni de répétitions ; développe seulement quand c'est demandé ou vraiment utile.
 
 # Ta mémoire : tu apprends au fil des discussions
 Tu as une mémoire permanente (liste plus bas). Chaque info a un identifiant [mN].
@@ -35,7 +36,7 @@ Tu as une mémoire permanente (liste plus bas). Chaque info a un identifiant [mN
 - Après avoir mémorisé, mentionne-le en une demi-phrase seulement.
 
 # Ses documents
-Franck peut te confier des documents (notices, référentiels, DTU, cours, textes officiels). Des extraits pertinents te sont fournis automatiquement quand ils existent. Si ça ne suffit pas, utilise l'outil \`rechercher_documents\` avec des mots-clés précis (plusieurs fois si besoin, avec d'autres mots). Quand tu t'appuies sur un document, cite-le brièvement : (Notice XYZ, p. 12).
+Franck peut te confier des documents (notices, référentiels, DTU, cours, textes officiels). Des extraits pertinents sont parfois joints automatiquement à sa question. Si ça ne suffit pas, utilise l'outil \`rechercher_documents\` avec des mots-clés précis (plusieurs fois si besoin, avec d'autres mots). Quand tu t'appuies sur un document, cite-le brièvement : (Notice XYZ, p. 12).
 
 # Chiffrage, étude de prix et coefficient de vente (Kv)
 Franck fait ses études de prix comme en formation. Vocabulaire :
@@ -60,26 +61,20 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     autoOff: 'La mémoire automatique est désactivée : ne mémorise que si Franck le demande explicitement.',
     web: '\n\n# Recherche sur Internet\nTu peux chercher sur le web (outil web_search) pour les prix, la réglementation récente, les fiches et notices constructeurs. Ne le fais que si c\'est utile, et donne les sources.',
     consignes: '\n\n# Consignes personnelles de Franck (prioritaires sur tout ce qui précède, sauf la sécurité et l\'honnêteté)\n',
-    voice: '\n\n# Question dictée à la voix\nCette question a été dictée (la reconnaissance vocale peut avoir mal compris un mot technique : corrige mentalement) et ta réponse sera lue à voix haute. Réponds de façon courte et orale : phrases simples, pas de tableau ni de longue liste, les chiffres clés d\'abord. Propose d\'envoyer le détail par écrit si c\'est long.'
+    voice: ' Cette question a été dictée (la reconnaissance vocale peut avoir mal compris un mot technique : corrige mentalement) et ta réponse sera lue à voix haute. Réponds de façon courte et orale : phrases simples, pas de tableau ni de longue liste, les chiffres clés d\'abord. Propose d\'envoyer le détail par écrit si c\'est long.'
   };
 
-  function buildSystem(excerpts, voice) {
+  // Consignes + contexte (mémoire figée, date du jour). Tout est mis en cache.
+  function buildSystem(context) {
     const s = Settings.data;
     const consignes = (s.consignes || '').trim();
     const persona = PERSONA
       .replace('{{AUTO}}', s.autoMemory ? TXT.autoOn : TXT.autoOff)
       .replace('{{WEB}}', s.webSearch ? TXT.web : '')
       .replace('{{CONSIGNES}}', consignes ? TXT.consignes + consignes : '');
-    const now = new Date();
-    let ctx = '# Contexte\nDate : ' + now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
-      ', ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + '.';
-    if (excerpts) ctx += '\n\n# Extraits de ses documents qui semblent liés à la question\n' + excerpts;
-    if (voice) ctx += TXT.voice;
-    // Les deux premiers blocs changent rarement : ils sont mis en cache (moins cher).
     return [
       { type: 'text', text: persona, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: '# Mémoire permanente (ce que tu sais de Franck)\n' + Memory.forPrompt() + '\n\n# Documents disponibles\n' + Docs.forPrompt(), cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: ctx }
+      { type: 'text', text: context, cache_control: { type: 'ephemeral' } }
     ];
   }
 
@@ -240,36 +235,114 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     return out;
   }
 
-  // Garde la fin de la discussion (40 messages, ~160 000 caractères au plus),
-  // en commençant toujours par une vraie question, et retire les « réflexions » des tours passés.
-  function windowMessages(all) {
-    const msgs0 = sanitize(all);
-    let start = Math.max(0, msgs0.length - 40);
-    while (start < msgs0.length && !isPlainUser(msgs0[start])) start++;
-    let msgs = msgs0.slice(start);
-    while (msgs.length > 2 && JSON.stringify(msgs).length > 160000) {
-      let i = 1;
-      while (i < msgs.length && !isPlainUser(msgs[i])) i++;
-      if (i >= msgs.length) break;
-      msgs = msgs.slice(i);
-    }
-    let lastQuestion = -1;
-    msgs.forEach((m, k) => { if (isPlainUser(m)) lastQuestion = k; });
-    return msgs.map((m, k) => {
-      if (k >= lastQuestion || m.role !== 'assistant' || !Array.isArray(m.content) || !m.content.some(isThinking)) return m;
-      const c = m.content.filter((b) => !isThinking(b));
-      return { role: 'assistant', content: c.length ? c : [{ type: 'text', text: '…' }] };
-    });
+  // ================= Économies : cache et historique compact =================
+  // Le cerveau facture chaque mot qu'on lui envoie. Pour que ce soit peu cher :
+  //  1. le début de chaque demande (consignes, mémoire, historique) doit rester IDENTIQUE
+  //     d'une question à l'autre : il est alors relu depuis le cache, ~20 fois moins cher ;
+  //  2. une fois une réponse terminée, on allège ce qui ne sert plus (résultats web,
+  //     extraits de documents, gros tableurs, réflexions, photos).
+
+  const WINDOW_MAX_MSGS = 60;      // au-delà, on repart d'une fenêtre plus courte…
+  const WINDOW_MAX_CHARS = 240000;
+  const WINDOW_KEEP_MSGS = 16;     // …qui garde la fin de la discussion
+
+  const EXCERPT_TAG = '[[EXTRAITS]]';
+  const VOICE_TAG = '[[VOIX]]';
+
+  function snapshot() {
+    return '# Mémoire permanente (ce que tu sais de Franck)\n' + Memory.forPrompt() + '\n\n# Documents disponibles\n' + Docs.forPrompt();
   }
 
-  // Remplace photos et PDF par une mention, pour garder l'historique léger.
-  function lighten(content) {
-    if (!Array.isArray(content)) return content;
-    return content.map((b) => {
-      if (b.type === 'image') return { type: 'text', text: '[Photo jointe à ce message]' };
-      if (b.type === 'document') return { type: 'text', text: '[PDF joint à ce message' + (b.title ? ' : ' + b.title : '') + ']' };
-      return b;
-    });
+  // Fenêtre d'historique stable : elle ne bouge que rarement, et d'un coup.
+  function updateWindow(conv) {
+    if (conv.winStart == null) conv.winStart = 0;
+    const tail = conv.api.slice(conv.winStart);
+    if (tail.length <= WINDOW_MAX_MSGS && JSON.stringify(tail).length <= WINDOW_MAX_CHARS) return false;
+    let start = Math.max(conv.winStart, conv.api.length - WINDOW_KEEP_MSGS);
+    while (start < conv.api.length - 1 && !isPlainUser(conv.api[start])) start++;
+    conv.winStart = start;
+    return true;
+  }
+
+  // Ce que le cerveau reçoit avant la discussion. La mémoire est figée au début de chaque
+  // discussion (ou quand la fenêtre se décale) : sinon chaque info retenue casserait le cache.
+  function buildContext(conv, shifted) {
+    if (!conv.memSnap || shifted || !conv.api.length) conv.memSnap = snapshot();
+    const day = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const system = buildSystem(conv.memSnap + '\n\n# Date\n' + day + '.');
+    const tools = buildTools();
+    const thinking = Settings.data.deepThinking ? undefined : { type: 'disabled' };
+    return { system, tools, thinking };
+  }
+
+  // Retire les réflexions d'un message (elles ne servent plus une fois la réponse donnée)
+  function dropThinking(m) {
+    if (m.role !== 'assistant' || !Array.isArray(m.content) || !m.content.some(isThinking)) return m;
+    const c = m.content.filter((b) => !isThinking(b));
+    return { role: 'assistant', content: c.length ? c : [{ type: 'text', text: '…' }] };
+  }
+
+  // Allège un tour terminé (à partir de la question qIndex)
+  function compactTurn(conv, qIndex) {
+    for (let i = qIndex; i < conv.api.length; i++) {
+      let m = conv.api[i];
+      if (!Array.isArray(m.content)) continue;
+      if (m.role === 'user') {
+        m = {
+          role: 'user',
+          content: m.content.map((b) => {
+            if (b.type === 'image') return { type: 'text', text: '[Photo jointe à ce message]' };
+            if (b.type === 'document') return { type: 'text', text: '[PDF joint à ce message' + (b.title ? ' : ' + b.title : '') + ']' };
+            if (b.type === 'text' && b.text.startsWith(EXCERPT_TAG)) return { type: 'text', text: '[Extraits de ses documents fournis pour cette question]' };
+            if (b.type === 'text' && b.text.startsWith(VOICE_TAG)) return { type: 'text', text: '[Question dictée à la voix]' };
+            if (b.type === 'tool_result' && typeof b.content === 'string' && b.content.length > 1500) {
+              return Object.assign({}, b, { content: b.content.slice(0, 600) + '\n[… extraits raccourcis : relance rechercher_documents si besoin]' });
+            }
+            return b;
+          })
+        };
+      } else {
+        m = dropThinking(m);
+        const webIds = new Set(m.content.filter((b) => b.type === 'server_tool_use').map((b) => b.id));
+        m = {
+          role: 'assistant',
+          content: m.content
+            .filter((b) => !(b.type === 'server_tool_use' || b.type === 'web_search_tool_result'))
+            .map((b) => {
+              if (b.type === 'text' && b.citations) { const c = Object.assign({}, b); delete c.citations; return c; }
+              if (b.type === 'tool_use' && b.name === 'creer_tableur') {
+                return Object.assign({}, b, { input: { nom_fichier: (b.input && b.input.nom_fichier) || 'Tableau', feuilles: '[fichier créé et remis à Franck]' } });
+              }
+              return b;
+            })
+        };
+        if (webIds.size) m.content.unshift({ type: 'text', text: '[J\'ai fait ' + webIds.size + ' recherche(s) sur Internet pour cette réponse.]' });
+        if (!m.content.length) m.content = [{ type: 'text', text: '…' }];
+      }
+      conv.api[i] = m;
+    }
+  }
+
+  // Historique envoyé : la fenêtre, réparée, sans réflexions des tours passés
+  function history(conv) {
+    return sanitize(conv.api.slice(conv.winStart || 0)).map(dropThinking);
+  }
+
+  // Ajoute un point de cache sur le dernier bloc du dernier message (sans modifier l'historique)
+  function withCacheMark(messages) {
+    if (!messages.length) return messages;
+    const out = messages.slice();
+    const last = out[out.length - 1];
+    const blocks = asBlocks(last).slice();
+    const i = blocks.length - 1;
+    blocks[i] = Object.assign({}, blocks[i], { cache_control: { type: 'ephemeral' } });
+    out[out.length - 1] = { role: last.role, content: blocks };
+    return out;
+  }
+
+  // Pour les tests : ancienne interface (fenêtre + nettoyage)
+  function windowMessages(all) {
+    return sanitize(all).map(dropThinking);
   }
 
   // ================= Une réponse complète =================
@@ -286,33 +359,49 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     const question = content.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
     const turn = { texts: [], mem: [], sources: [], files: [] };
 
+    // Extraits de documents ajoutés d'office à la question si elle y ressemble (allégés ensuite)
+    const extra = [];
+    if (Docs.list.length && question.trim()) {
+      const recent = conv.display.filter((m) => m.role === 'user').slice(-2).map((m) => m.text).join(' ');
+      const r = Docs.search(recent || question, 4).filter((x) => x.score > 2);
+      if (r.length) extra.push({ type: 'text', text: EXCERPT_TAG + ' Extraits de mes documents qui semblent liés :\n' + Docs.excerpts(r, 8000) });
+    }
+    if (opts.voice) extra.push({ type: 'text', text: VOICE_TAG + TXT.voice });
+
+    if (!conv.compacted) { compactTurn(conv, 0); conv.compacted = true; } // anciennes discussions : on les allège une fois
+    const shifted = updateWindow(conv);
     const qIndex = conv.api.length;
-    conv.api.push({ role: 'user', content });
+    conv.api.push({ role: 'user', content: extra.concat(content) });
     try {
-      // Extraits de documents ajoutés d'office si la question y ressemble
-      let excerpts = '';
-      if (Docs.list.length && question.trim()) {
-        // la question et la précédente (pour les suites du type « et pour le R32 ? »)
-        const recent = conv.display.filter((m) => m.role === 'user').slice(-2).map((m) => m.text).join(' ');
-        const r = Docs.search(recent || question, 4).filter((x) => x.score > 2);
-        if (r.length) excerpts = Docs.excerpts(r, 8000);
-      }
-      const system = buildSystem(excerpts, opts.voice);
-      const tools = buildTools();
-      // L'historique d'avant est figé pour tout le tour : le cerveau exige qu'il ne change pas
-      // pendant qu'il enchaîne ses étapes (outils, réflexion).
-      const prefix = windowMessages(conv.api);
-      const turnMessages = () => conv.api.slice(qIndex + 1);
-      let restarted = false, cutRetry = false;
+      const ctx = buildContext(conv, shifted);
+      // L'historique d'avant est figé pour tout le tour
+      const prefix = history(conv).slice(0, -1);
+      const qMsg = conv.api[qIndex];
+      let restarted = false, cutRetry = false, noThinkingParam = !!Settings.data.noThinkingParam;
 
       for (let step = 0; step < 10 && !cancelled(); step++) {
+        // Point de cache : sur le dernier message en temps normal ; sur la question si la réflexion est
+        // active, pour que ce qui précède ses blocs de réflexion ne change pas pendant le tour.
+        const msgs = Settings.data.deepThinking
+          ? withCacheMark(prefix.concat([qMsg])).concat(conv.api.slice(qIndex + 1))
+          : withCacheMark(prefix.concat([qMsg], conv.api.slice(qIndex + 1)));
+        const body = { model: Settings.data.model, max_tokens: CFG.maxTokens, system: ctx.system, tools: ctx.tools, messages: msgs };
+        if (ctx.thinking && !noThinkingParam) body.thinking = ctx.thinking;
         let res;
         try {
-          res = await api.call({ model: Settings.data.model, max_tokens: CFG.maxTokens, system, tools, messages: prefix.concat(turnMessages()) });
+          res = await api.call(body);
         } catch (err) {
-          // Filet de sécurité : si le cerveau refuse ses propres blocs de réflexion, on reprend le tour une fois.
+          // Si ce modèle refuse le réglage « sans réflexion », on s'en passe (et on s'en souvient)
+          if (err.status === 400 && body.thinking && /thinking/i.test(err.message) && !/signature/i.test(err.message)) {
+            noThinkingParam = true;
+            Settings.set('noThinkingParam', true);
+            step--;
+            continue;
+          }
+          // Filet de sécurité : blocs de réflexion refusés → on reprend le tour une fois, sans eux
           if (!restarted && err.status === 400 && /thinking|signature/i.test(err.message)) {
             restarted = true;
+            conv.api = conv.api.map(dropThinking);
             conv.api.splice(qIndex + 1);
             turn.texts = []; turn.sources = []; turn.files = [];
             status('Manaen reprend sa réflexion…');
@@ -373,7 +462,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
         // Limite d'étapes atteinte sur un outil : on referme proprement
         conv.api.push({ role: 'assistant', content: [{ type: 'text', text: text || '…' }] });
       }
-      conv.api[qIndex] = { role: 'user', content: lighten(content) };
+      compactTurn(conv, qIndex);
       return {
         text: (text + (wasCancelled ? '\n\n*(interrompu)*' : '')).trim() || '(pas de réponse)',
         mem: turn.mem, sources: turn.sources.slice(0, 8), files: turn.files, cancelled: wasCancelled
@@ -384,5 +473,5 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     }
   }
 
-  M.brain = { respond, buildSystem, buildTools, sanitize, windowMessages };
+  M.brain = { respond, buildSystem, buildTools, sanitize, windowMessages, compactTurn };
 })();

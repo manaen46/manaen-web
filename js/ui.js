@@ -506,13 +506,14 @@
     }, '<span class="dot"></span><span><strong>' + m.name + '</strong><br><span class="muted small">' + m.desc + '</span></span>')));
     $('#set-automem').checked = !!s.autoMemory;
     $('#set-web').checked = !!s.webSearch;
+    $('#set-thinking').checked = !!s.deepThinking;
     $('#set-voice-send').checked = !!s.voiceAutoSend;
     $('#set-voice-read').checked = !!s.voiceRead;
     if (document.activeElement !== $('#set-consignes')) $('#set-consignes').value = s.consignes || '';
 
     const u = Settings.monthUsage();
     $('#usage').innerHTML = u.calls
-      ? 'Ce mois-ci : <strong>' + fmtNum(u.calls) + '</strong> appels, ' + fmtNum(u.read) + ' jetons lus, ' + fmtNum(u.written) + ' jetons écrits' +
+      ? 'Ce mois-ci : <strong>' + fmtNum(u.calls) + '</strong> appels, ' + fmtNum(u.read) + ' jetons lus (dont ' + Math.round(100 * u.cached / Math.max(1, u.read)) + ' % depuis le cache, beaucoup moins chers), ' + fmtNum(u.written) + ' jetons écrits' +
         (u.web ? ', ' + u.web + ' recherches web' : '') + '.<br><span class="muted">Le coût exact est visible sur console.anthropic.com (menu Usage).</span>'
       : '<span class="muted">Rien ce mois-ci.</span>';
     $('#install-card').style.display = !P.isNative() && state.installEvt ? '' : 'none';
@@ -624,6 +625,7 @@
     on('#btn-key-save', 'click', () => checkKey($('#set-key').value.trim(), $('#key-status')));
     toggle('#set-automem', 'autoMemory');
     toggle('#set-web', 'webSearch', updateBrand);
+    toggle('#set-thinking', 'deepThinking');
     toggle('#set-voice-send', 'voiceAutoSend');
     toggle('#set-voice-read', 'voiceRead');
     let consTimer;

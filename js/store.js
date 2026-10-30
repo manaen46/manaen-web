@@ -39,7 +39,7 @@
   // ---------------- Réglages (localStorage) ----------------
   const DEFAULTS = {
     apiKey: '', model: CFG.models[0].id, autoMemory: true, webSearch: false,
-    voiceAutoSend: true, voiceRead: true, consignes: '', usage: {}
+    voiceAutoSend: true, voiceRead: true, consignes: '', usage: {}, deepThinking: false, noThinkingParam: false
   };
   const Settings = {
     data: {},
@@ -68,8 +68,8 @@
     },
     monthUsage() {
       const u = this.data.usage[new Date().toISOString().slice(0, 7)] || {};
-      const t = { read: 0, written: 0, calls: 0, web: 0 };
-      Object.values(u).forEach((x) => { t.read += x.in + x.cacheRead + x.cacheWrite; t.written += x.out; t.calls += x.calls; t.web += x.web || 0; });
+      const t = { read: 0, cached: 0, written: 0, calls: 0, web: 0 };
+      Object.values(u).forEach((x) => { t.read += x.in + x.cacheRead + x.cacheWrite; t.cached += x.cacheRead; t.written += x.out; t.calls += x.calls; t.web += x.web || 0; });
       return t;
     }
   };
