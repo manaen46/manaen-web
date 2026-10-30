@@ -441,11 +441,11 @@
       return;
     }
     Docs.list.forEach((d) => {
-      const icon = { PDF: 'PDF', Photo: 'IMG' }[d.type] || 'TXT';
+      const icon = { PDF: 'PDF', Photo: 'IMG', Word: 'DOC', PowerPoint: 'PPT', Excel: 'XLS' }[d.type] || 'TXT';
       const row = el('div', { class: 'doc-row' },
         '<div class="doc-icon">' + icon + '</div><div class="grow"><div class="doc-name">' + esc(d.name) + '</div>' +
         (d.summary ? '<div class="doc-sum">' + esc(d.summary) + '</div>' : '') +
-        '<div class="item-meta">' + (d.pages ? '<span>' + d.pages + ' pages</span>' : '') + '<span>' + fmtNum(d.chars / 5.5) + ' mots</span>' +
+        '<div class="item-meta">' + (d.pages ? '<span>' + d.pages + (d.type === 'PowerPoint' ? ' diapos' : ' pages') + '</span>' : '') + '<span>' + fmtNum(d.chars / 5.5) + ' mots</span>' +
         (d.method === 'scan' || d.method === 'claude' ? '<span class="badge">lu par Manaen</span>' : '') +
         '<span>' + fmtDate(d.ts) + '</span></div></div>');
       const acts = el('div', { class: 'item-actions' });

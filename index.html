@@ -80,9 +80,9 @@
         </div>
         <button class="dropzone" id="btn-doc-add">
           <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
-          <span><strong>Ajouter des documents</strong><br><span class="muted">PDF, photos, fichiers texte</span></span>
+          <span><strong>Ajouter des documents</strong><br><span class="muted">PDF, Word, PowerPoint, Excel, photos, texte</span></span>
         </button>
-        <input type="file" id="file-docs" accept="application/pdf,image/*,.txt,.md,.csv,.json,.html,text/*" multiple hidden>
+        <input type="file" id="file-docs" accept="application/pdf,image/*,text/*,.txt,.md,.csv,.json,.html,.docx,.pptx,.xlsx,.odt,.odp,.ods,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.spreadsheet,application/msword,application/vnd.ms-powerpoint,application/vnd.ms-excel" multiple hidden>
         <div id="doc-progress"></div>
         <div id="doc-list" class="list"></div>
       </div>
