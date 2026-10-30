@@ -120,6 +120,10 @@
     version() {
       try { return N() ? N().version() : 'version ordinateur'; } catch (e) { return '?'; }
     },
+    // Prévient le téléphone qu'un travail commence ou se termine (mode arrière-plan, notifications)
+    busy(on, text) {
+      try { if (N() && N().setBusy) N().setBusy(!!on, String(text || '')); } catch (e) { /* ancienne version de l'appli */ }
+    },
     openUrl(url) {
       if (N()) N().openUrl(url);
       else window.open(url, '_blank');

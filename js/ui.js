@@ -188,6 +188,7 @@
 
     renderMessages();
     setBusy(true);
+    P.busy(true, 'Manaen rédige : « ' + (text.length > 50 ? text.slice(0, 50) + '…' : text || 'ta pièce jointe') + ' »');
     const status = showStatus('Manaen réfléchit…');
     const voiceMode = !!viaVoice && !!Settings.data.voiceRead;
     let speakIdx = null;
@@ -205,7 +206,15 @@
       await Chats.save();
       renderMessages();
       if (speakIdx != null) toggleSpeak(speakIdx);
+      const last = conv.display[conv.display.length - 1];
+      P.busy(false, last.error ? 'Problème : ' + last.text : preview(last.text));
     }
+  }
+
+  // Début de réponse en texte simple, pour la notification « réponse prête »
+  function preview(md) {
+    const t = M.voice.speechText(md).replace(/\s+/g, ' ').trim();
+    return t.length > 160 ? t.slice(0, 157) + '…' : t;
   }
 
   function retry(idx) {
@@ -457,6 +466,7 @@
     if (!Settings.key) { openWelcome(); return; }
     if (state.ingesting) { toast('Un document est déjà en cours de lecture.'); return; }
     state.ingesting = true;
+    P.busy(true, 'Manaen lit tes documents…');
     const confirmScan = (n) => confirmBox('PDF scanné', 'Ce document est un scan (' + n + ' pages) : Manaen doit le lire page par page avec son cerveau rapide. Ça coûte quelques centimes. On y va ?', 'Lire le scan');
     for (const file of files) {
       const prog = el('div', { class: 'progress' }, '<div><strong>' + esc(file.name) + '</strong></div><div class="muted small msg">Préparation…</div><div class="bar"><div></div></div>');
@@ -479,6 +489,7 @@
       }
     }
     state.ingesting = false;
+    P.busy(false, files.length > 1 ? 'Tes ' + files.length + ' documents sont traités.' : 'Ton document « ' + files[0].name + ' » est traité.');
   }
 
   // ======================================================================
