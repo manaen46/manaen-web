@@ -587,8 +587,45 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     }
   }
 
+  // Répare un historique abîmé (réponse coupée au milieu d'un appel d'outil, etc.)
+  function sanitize(api) {
+    const out = [];
+    for (let i = 0; i < api.length; i++) {
+      let m = api[i];
+      if (m.role === 'assistant' && Array.isArray(m.content)) {
+        const next = api[i + 1];
+        const results = new Set();
+        if (next && next.role === 'user' && Array.isArray(next.content)) next.content.forEach((b) => { if (b.type === 'tool_result') results.add(b.tool_use_id); });
+        const webDone = new Set(m.content.filter((b) => b.type === 'web_search_tool_result').map((b) => b.tool_use_id));
+        let c = m.content.filter((b) => {
+          if (b.type === 'tool_use') return results.has(b.id);
+          if (b.type === 'server_tool_use') return webDone.has(b.id);
+          return true;
+        });
+        if (!c.some((b) => b.type !== 'thinking' && b.type !== 'redacted_thinking')) c = [{ type: 'text', text: '…' }];
+        if (c.length !== m.content.length || c !== m.content) m = { role: 'assistant', content: c };
+      } else if (m.role === 'user' && Array.isArray(m.content)) {
+        const prev = out[out.length - 1];
+        const asked = new Set();
+        if (prev && prev.role === 'assistant' && Array.isArray(prev.content)) prev.content.forEach((b) => { if (b.type === 'tool_use') asked.add(b.id); });
+        const c = m.content.filter((b) => b.type !== 'tool_result' || asked.has(b.tool_use_id));
+        if (c.length !== m.content.length) m = { role: 'user', content: c.length ? c : [{ type: 'text', text: '(suite)' }] };
+      }
+      // jamais deux messages du même rôle à la suite
+      const prev = out[out.length - 1];
+      if (prev && prev.role === m.role) {
+        const toArr = (x) => (typeof x.content === 'string' ? [{ type: 'text', text: x.content }] : x.content);
+        out[out.length - 1] = { role: m.role, content: toArr(prev).concat(toArr(m)) };
+        continue;
+      }
+      out.push(m);
+    }
+    return out;
+  }
+
   // Préparer l'historique envoyé : on garde une fenêtre raisonnable.
   function windowMessages(api) {
+    api = sanitize(api);
     const MAX_CHARS = 160000;
     let start = Math.max(0, api.length - 40);
     const isPlainUser = (m) => m.role === 'user' && (typeof m.content === 'string' || !m.content.some((b) => b.type === 'tool_result'));
@@ -719,7 +756,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
         if (cancelled) break;
         const res = await callClaude({
           model: Settings.data.model,
-          max_tokens: 8000,
+          max_tokens: 32000,
           system: system,
           tools: tools,
           messages: windowMessages(conv.api)
@@ -751,7 +788,22 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
           status.set('Manaen rédige…');
           continue;
         }
-        if (res.stop_reason === 'max_tokens') turn.texts.push('\n\n*(Réponse coupée car trop longue : demande-moi « continue ».)*');
+        if (res.stop_reason === 'max_tokens') {
+          const cut = res.content.filter((b) => b.type === 'tool_use');
+          if (cut.length && !turn.cutRetry) {
+            turn.cutRetry = true;
+            conv.api.push({
+              role: 'user',
+              content: cut.map((b) => ({
+                type: 'tool_result', tool_use_id: b.id, is_error: true,
+                content: 'Ta réponse a été coupée car trop longue : cet outil n\'a pas reçu ses données complètes. Recommence en plus court (moins de lignes, ou plusieurs fichiers/feuilles plus petits), sans répéter ce que tu as déjà écrit.'
+              }))
+            });
+            status.set('Le fichier était trop long, Manaen recommence en plus court…');
+            continue;
+          }
+          turn.texts.push('\n\n*(Réponse coupée car trop longue : demande-moi « continue ».)*');
+        }
         break;
       }
       if (cancelled) {
@@ -1718,7 +1770,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
   }
 
   // Exposé pour les tests
-  window.__manaen = { Memory, Docs, Chats, Settings, tokens, chunkPages, splitPagesFromTranscript, windowMessages };
+  window.__manaen = { Memory, Docs, Chats, Settings, tokens, chunkPages, splitPagesFromTranscript, windowMessages, sanitize };
 
   start();
 })();
