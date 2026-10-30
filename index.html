@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F1720">
+<title>Manaen</title>
+<link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <button class="icon-btn" id="btn-history" aria-label="Discussions">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    </button>
+    <div class="brand">
+      <div class="logo"><span class="m-cold"></span><span class="m-warm"></span></div>
+      <div>
+        <div class="brand-name">Manaen</div>
+        <div class="brand-sub" id="brand-sub">Assistant génie climatique</div>
+      </div>
+    </div>
+    <button class="btn small-btn install-top" id="btn-install-top" style="display:none">Installer</button>
+    <button class="icon-btn" id="btn-new" aria-label="Nouvelle discussion">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- DISCUSSION -->
+    <section class="view active" id="view-chat">
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <div class="attach-row" id="attach-row"></div>
+        <div class="composer-row">
+          <button class="icon-btn small" id="btn-attach" aria-label="Joindre une photo ou un PDF">
+            <svg viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9"/></svg>
+          </button>
+          <textarea id="input" rows="1" placeholder="Pose ta question…"></textarea>
+          <button class="icon-btn small mic" id="btn-mic" aria-label="Dicter">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
+          </button>
+          <button class="icon-btn small learn" id="btn-learn" aria-label="Apprends ça">
+            <svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 00-3.5 10.9V17h7v-3.1A6 6 0 0012 3zM9.5 20h5"/></svg>
+          </button>
+          <button class="send" id="btn-send" aria-label="Envoyer">
+            <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <input type="file" id="file-chat" accept="image/*,application/pdf" multiple hidden>
+      </div>
+    </section>
+
+    <!-- MÉMOIRE -->
+    <section class="view" id="view-memory">
+      <div class="page">
+        <div class="page-head">
+          <h1>Ce que Manaen sait</h1>
+          <p class="muted">Tout ce qu'il a retenu, par toi ou tout seul. Tu peux corriger ou supprimer chaque info.</p>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="mem-search" placeholder="Chercher dans la mémoire…">
+          <button class="btn primary" id="btn-mem-add">+ Apprendre</button>
+        </div>
+        <div class="chips" id="mem-filters"></div>
+        <div id="mem-list" class="list"></div>
+      </div>
+    </section>
+
+    <!-- DOCUMENTS -->
+    <section class="view" id="view-docs">
+      <div class="page">
+        <div class="page-head">
+          <h1>Documents</h1>
+          <p class="muted">Notices, référentiels, DTU, fiches techniques… Manaen les lit et s'en sert pour te répondre, en citant la page.</p>
+        </div>
+        <button class="dropzone" id="btn-doc-add">
+          <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+          <span><strong>Ajouter des documents</strong><br><span class="muted">PDF, photos, fichiers texte</span></span>
+        </button>
+        <input type="file" id="file-docs" accept="application/pdf,image/*,.txt,.md,.csv,.json,.html,text/*" multiple hidden>
+        <div id="doc-progress"></div>
+        <div id="doc-list" class="list"></div>
+      </div>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section class="view" id="view-settings">
+      <div class="page">
+        <div class="page-head">
+          <h1>Réglages</h1>
+        </div>
+
+        <div class="card" id="install-card" style="display:none">
+          <h3>Installer sur cet ordinateur</h3>
+          <p class="muted small">Ajoute Manaen sur ton bureau : il s'ouvrira dans sa propre fenêtre, comme un logiciel.</p>
+          <button class="btn primary full" id="btn-install">Installer Manaen</button>
+        </div>
+
+        <div class="card">
+          <h3>Clé API Claude</h3>
+          <p class="muted small">Elle reste sur ce téléphone. Elle sert uniquement à parler au cerveau de Manaen.</p>
+          <div class="key-row">
+            <input type="password" id="set-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+            <button class="btn" id="btn-key-show">Voir</button>
+          </div>
+          <button class="btn primary full" id="btn-key-save">Enregistrer et tester</button>
+          <div id="key-status" class="small"></div>
+        </div>
+
+        <div class="card">
+          <h3>Cerveau</h3>
+          <div class="radio-list" id="set-model"></div>
+        </div>
+
+        <div class="card">
+          <h3>Options</h3>
+          <label class="switch-row">
+            <span><strong>Mémoire automatique</strong><br><span class="muted small">Manaen retient tout seul ce qui est important dans vos discussions.</span></span>
+            <input type="checkbox" id="set-automem"><span class="switch"></span>
+          </label>
+          <label class="switch-row">
+            <span><strong>Recherche sur Internet</strong><br><span class="muted small">Pour les prix, la réglementation récente, les docs constructeurs. Un peu plus cher par question.</span></span>
+            <input type="checkbox" id="set-web"><span class="switch"></span>
+          </label>
+        </div>
+
+        <div class="card">
+          <h3>Mes consignes</h3>
+          <p class="muted small">Tes règles à toi, que Manaen applique à chaque réponse. Ex. : « Pour le Kv, mon formateur met les FG et le B&amp;A en % du PV HT. » · « Pour mes cours, niveau CAP par défaut. » · « Réponds toujours en moins de 10 lignes sauf si je demande le détail. »</p>
+          <textarea id="set-consignes" rows="6" placeholder="Écris tes consignes ici, une par ligne…"></textarea>
+          <div id="consignes-status" class="small ok"></div>
+        </div>
+
+        <div class="card">
+          <h3>Voix</h3>
+          <label class="switch-row">
+            <span><strong>Envoyer dès la fin de la dictée</strong><br><span class="muted small">Sinon le texte dicté reste dans la case pour que tu le relises.</span></span>
+            <input type="checkbox" id="set-voice-send"><span class="switch"></span>
+          </label>
+          <label class="switch-row">
+            <span><strong>Mode mains libres</strong><br><span class="muted small">Quand tu dictes une question, Manaen répond court et lit sa réponse à voix haute.</span></span>
+            <input type="checkbox" id="set-voice-read"><span class="switch"></span>
+          </label>
+        </div>
+
+        <div class="card">
+          <h3>Consommation</h3>
+          <div id="usage" class="small"></div>
+        </div>
+
+        <div class="card">
+          <h3>Sauvegarde</h3>
+          <p class="muted small">Exporte la mémoire et les documents dans un fichier, pour ne rien perdre si tu changes de téléphone.</p>
+          <div class="btn-row">
+            <button class="btn" id="btn-export">Exporter</button>
+            <button class="btn" id="btn-import">Importer</button>
+          </div>
+          <input type="file" id="file-import" accept="application/json,.json" hidden>
+        </div>
+
+        <div class="card danger-zone">
+          <h3>Effacer</h3>
+          <div class="btn-row">
+            <button class="btn danger" id="btn-clear-chats">Toutes les discussions</button>
+            <button class="btn danger" id="btn-clear-all">Tout Manaen</button>
+          </div>
+        </div>
+
+        <p class="muted small center" id="app-version"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="chat">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Discussion</span>
+    </button>
+    <button class="tab" data-view="memory">
+      <svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 00-3.5 10.9V17h7v-3.1A6 6 0 0012 3zM9.5 20h5"/></svg><span>Mémoire</span>
+    </button>
+    <button class="tab" data-view="docs">
+      <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg><span>Documents</span>
+    </button>
+    <button class="tab" data-view="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Réglages</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Feuille : historique -->
+<div class="sheet" id="sheet-history">
+  <div class="sheet-panel">
+    <div class="sheet-head"><h2>Discussions</h2><button class="icon-btn" data-close>✕</button></div>
+    <div id="history-list" class="list"></div>
+  </div>
+</div>
+
+<!-- Feuille : apprendre -->
+<div class="sheet" id="sheet-learn">
+  <div class="sheet-panel">
+    <div class="sheet-head"><h2 id="learn-title">Apprends ça</h2><button class="icon-btn" data-close>✕</button></div>
+    <p class="muted small">Écris une info que Manaen doit retenir pour toujours : une habitude, une valeur de réglage, un chantier, une règle…</p>
+    <textarea id="learn-text" rows="5" placeholder="Ex. : Sur les VRV Daikin, je fais toujours le tirage au vide à 500 microns minimum et je tiens 30 min."></textarea>
+    <div class="chips" id="learn-cats"></div>
+    <button class="btn primary full" id="btn-learn-save">Retenir</button>
+  </div>
+</div>
+
+<!-- Feuille : premier lancement -->
+<div class="sheet" id="sheet-welcome">
+  <div class="sheet-panel">
+    <div class="welcome-logo"><div class="logo big"><span class="m-cold"></span><span class="m-warm"></span></div></div>
+    <h2 class="center">Bienvenue, je suis Manaen</h2>
+    <p class="center muted">Ton assistant pro en génie climatique, plomberie, bâtiment et enseignement. Pour me réveiller, colle ta clé API Claude.</p>
+    <input type="password" id="welcome-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+    <button class="btn primary full" id="btn-welcome-go">C'est parti</button>
+    <div id="welcome-status" class="small center"></div>
+    <details class="help">
+      <summary>Où trouver ma clé ?</summary>
+      <ol>
+        <li>Va sur <a href="https://console.anthropic.com" data-ext="1">console.anthropic.com</a> et connecte-toi.</li>
+        <li>Menu <strong>Billing</strong> : ajoute un petit crédit (5 € suffisent pour commencer).</li>
+        <li>Menu <strong>API Keys</strong> → <strong>Create Key</strong>, nomme-la « Manaen ».</li>
+        <li>Copie la clé (elle commence par <code>sk-ant-</code>) et colle-la ici.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<!-- Fenêtre de confirmation / édition -->
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="btn-row end">
+      <button class="btn" id="modal-cancel">Annuler</button>
+      <button class="btn primary" id="modal-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="md.js"></script>
+<script src="files.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
