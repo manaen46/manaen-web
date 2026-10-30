@@ -1512,10 +1512,16 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
   async function exportAll() {
     const docs = [];
     for (const d of Docs.list) docs.push({ meta: d, chunks: (await DB.get('doc:' + d.id)) || [] });
+    const convs = [];
+    for (const c of Chats.index) {
+      const full = await DB.get('conv:' + c.id);
+      if (full) convs.push(full);
+    }
     const data = {
-      app: 'manaen', version: 1, date: new Date().toISOString(),
+      app: 'manaen', version: 2, date: new Date().toISOString(),
       memory: Memory.items,
       docs: docs,
+      conversations: convs,
       settings: { model: Settings.data.model, autoMemory: Settings.data.autoMemory, webSearch: Settings.data.webSearch, consignes: Settings.data.consignes }
     };
     const json = JSON.stringify(data);
@@ -1533,7 +1539,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     try {
       const data = JSON.parse(await readAsText(file));
       if (data.app !== 'manaen') throw new Error('Ce fichier n\'est pas une sauvegarde Manaen.');
-      const ok = await confirmBox('Importer', 'Ajouter ' + (data.memory || []).length + ' infos de mémoire et ' + (data.docs || []).length + ' documents ? Les doublons sont ignorés.', 'Importer');
+      const ok = await confirmBox('Importer', 'Ajouter ' + (data.memory || []).length + ' infos de mémoire, ' + (data.docs || []).length + ' documents et ' + (data.conversations || []).length + ' discussions ? Les doublons sont ignorés.', 'Importer');
       if (!ok) return;
       for (const m of data.memory || []) {
         if (!Memory.items.find((x) => norm(x.text) === norm(m.text))) {
@@ -1548,6 +1554,22 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
         Docs.list.push(d.meta);
       }
       await Docs.saveList();
+      let addedConv = 0;
+      for (const c of data.conversations || []) {
+        if (!c || !c.id || !Array.isArray(c.display) || !c.display.length) continue;
+        if (Chats.index.find((x) => x.id === c.id)) continue;
+        await DB.set('conv:' + c.id, c);
+        Chats.index.push({ id: c.id, title: c.title || 'Discussion', ts: c.ts || Date.now() });
+        addedConv++;
+      }
+      if (addedConv) {
+        Chats.index.sort((a, b) => b.ts - a.ts);
+        if (Chats.index.length > 200) {
+          const old = Chats.index.splice(200);
+          for (const o of old) await DB.del('conv:' + o.id);
+        }
+        await DB.set('convs', Chats.index);
+      }
       if (data.settings && data.settings.consignes && !Settings.data.consignes) { Settings.data.consignes = data.settings.consignes; Settings.save(); }
       toast('Import terminé');
       renderMemory(); renderDocs();
