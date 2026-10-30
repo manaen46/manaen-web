@@ -600,7 +600,16 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
       if (i >= msgs.length) break;
       msgs = msgs.slice(i);
     }
-    return msgs;
+    // Les blocs de réflexion (thinking) ne sont valables que pendant le tour en cours :
+    // on les retire des tours précédents, sinon l'API refuse la demande.
+    let lastPlain = -1;
+    msgs.forEach((m, k) => { if (isPlainUser(m)) lastPlain = k; });
+    return msgs.map((m, k) => {
+      if (k >= lastPlain || m.role !== 'assistant' || !Array.isArray(m.content)) return m;
+      const c = m.content.filter((bl) => bl.type !== 'thinking' && bl.type !== 'redacted_thinking');
+      if (c.length === m.content.length) return m;
+      return { role: 'assistant', content: c.length ? c : [{ type: 'text', text: '…' }] };
+    });
   }
 
   // Supprime les données binaires (photos, PDF) des anciens messages pour garder l'historique léger.
