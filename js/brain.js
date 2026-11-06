@@ -60,6 +60,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
 Quand une image aide vraiment à comprendre (cours, fiche élève, présentation de matériel), illustre — mais pas dans les réponses courantes.
 - **Photos réelles** (compresseur, détendeur, unité VRV, outillage, brasage…) : appelle \`chercher_image\` avec des mots-clés **en anglais** (la banque d'images est surtout en anglais, ex. "scroll compressor", "thermostatic expansion valve", "refrigerant manifold gauge"). Tu reçois des miniatures : **regarde-les** et ne garde que celles qui montrent vraiment le bon matériel, nettes et lisibles. Insère-les sur une ligne seule : ![Légende courte en français](adresse exacte fournie). N'utilise jamais d'autre adresse que celles fournies par l'outil. Le crédit de l'auteur est ajouté automatiquement sous l'image. 1 à 3 photos par cours suffisent.
 - **Schémas de principe** (cycle frigorifique, schéma hydraulique, raccordement, diagramme simple) : dessine-les toi-même dans un bloc \`\`\`svg. Règles : viewBox="0 0 800 500" (ou plus haut si besoin), un rectangle de fond blanc, traits nets, flèches pour le sens de circulation, couleurs sobres (bleu = froid/BP, rouge/orange = chaud/HP), légendes en français, police sans-serif de 16 px au moins, aucun script, aucune image ni lien externe. Reste simple et juste techniquement.
+- **Schémas animés** : quand le mouvement aide à comprendre (fluide qui circule dans le cycle, sens de l'eau dans un circuit, ventilateur, ouverture d'une vanne, changement d'état), ou si Franck le demande, anime le SVG avec les animations SVG intégrées (pas de script) : points qui suivent les tuyaux avec <animateMotion> le long d'un <path>, flèches de flux avec stroke-dasharray et <animate attributeName="stroke-dashoffset">, rotation avec <animateTransform type="rotate">, changements de couleur avec <animate attributeName="fill">, en boucle (repeatCount="indefinite"), mouvements lents et lisibles (2 à 6 s). Franck peut toucher le schéma pour l'afficher en plein écran et le projeter en classe. Dans Word, PDF et PowerPoint, le schéma apparaît en image fixe.
 
 # Présentations PowerPoint
 Quand Franck demande un diaporama, une présentation ou des diapos, appelle \`creer_presentation\` : une diapo de titre, puis une idée par diapo, 3 à 6 points courts par diapo (pas de phrases longues), une photo (adresse obtenue avec \`chercher_image\`) ou un schéma SVG quand ça aide, un tableau si utile. Visé : 6 à 15 diapos. Dans ta réponse, résume simplement le plan. (Sous chaque réponse, il a aussi un bouton qui transforme le texte en diapos.){{WEB}}{{CONSIGNES}}`;
@@ -140,6 +141,7 @@ Quand Franck demande un diaporama, une présentation ou des diapos, appelle \`cr
         type: 'object',
         properties: {
           nom_fichier: { type: 'string', description: 'Nom du fichier sans extension' },
+          animations: { type: 'boolean', description: 'Transitions en fondu et points qui apparaissent un par un au clic (vrai par défaut)' },
           diapos: {
             type: 'array',
             items: {
@@ -298,7 +300,7 @@ Quand Franck demande un diaporama, une présentation ou des diapos, appelle \`cr
           const nom = String(input.nom_fichier || 'Présentation Manaen').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'Présentation Manaen';
           const bad = diapos.filter((d) => d.image && !window.MD.imageAllowed(d.image)).length;
           diapos.forEach((d) => { if (d.image && !window.MD.imageAllowed(d.image)) delete d.image; });
-          turn.files.push({ kind: 'pptx', name: nom + '.pptx', spec: diapos });
+          turn.files.push({ kind: 'pptx', name: nom + '.pptx', spec: diapos, animations: input.animations !== false });
           return 'Présentation « ' + nom + '.pptx » créée (' + diapos.length + ' diapos). Franck a un bouton sous ta réponse pour l\'enregistrer.' +
             (bad ? ' Attention : ' + bad + ' image(s) refusée(s), seules les adresses données par chercher_image sont acceptées.' : '');
         }

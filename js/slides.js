@@ -61,10 +61,40 @@
       '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
   }
 
+  // ---------------- Animations ----------------
+  // steps : [{spid, para (n° de paragraphe ou null), click (au clic) ou automatique au début}]
+  function timing(steps, builds) {
+    if (!steps.length) return '';
+    let id = 3;
+    const pars = steps.map((st) => {
+      const tgt = '<p:spTgt spid="' + st.spid + '">' + (st.para != null ? '<p:txEl><p:pRg st="' + st.para + '" end="' + st.para + '"/></p:txEl>' : '') + '</p:spTgt>';
+      const start = st.click
+        ? '<p:cond delay="indefinite"/>'
+        : '<p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond>';
+      const outer = id++, mid = id++, eff = id++, set = id++, fade = id++;
+      return '<p:par><p:cTn id="' + outer + '" fill="hold"><p:stCondLst>' + start + '</p:stCondLst><p:childTnLst>' +
+        '<p:par><p:cTn id="' + mid + '" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>' +
+        '<p:par><p:cTn id="' + eff + '" presetID="10" presetClass="entr" presetSubtype="0" fill="hold" grpId="0" nodeType="' + (st.click ? 'clickEffect' : 'afterEffect') + '">' +
+        '<p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>' +
+        '<p:set><p:cBhvr><p:cTn id="' + set + '" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl>' + tgt + '</p:tgtEl>' +
+        '<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>' +
+        '<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="' + fade + '" dur="500"/><p:tgtEl>' + tgt + '</p:tgtEl></p:cBhvr></p:animEffect>' +
+        '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>';
+    }).join('');
+    return '<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>' +
+      '<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>' + pars + '</p:childTnLst></p:cTn>' +
+      '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>' +
+      '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>' +
+      '</p:childTnLst></p:cTn></p:par></p:tnLst>' + (builds ? '<p:bldLst>' + builds + '</p:bldLst>' : '') + '</p:timing>';
+  }
+
   // ---------------- Une diapo ----------------
-  function slideXml(d, num, total, imgRid, img) {
+  // animate : transitions en fondu, image et tableau qui apparaissent, points un par un au clic
+  function slideXml(d, num, total, imgRid, img, animate) {
     shapeId = 2;
     let tree = '';
+    const steps = [];
+    let builds = '';
     if (d.type === 'titre') {
       tree += rect(0, 0, W, H, BLUE) + rect(0, H * 0.62, W, 60000, ORANGE);
       tree += textBox(800000, H * 0.25, W - 1600000, 1500000, [{ text: plain(d.titre), size: 4400, bold: true, color: 'FFFFFF' }], 'b');
@@ -76,9 +106,14 @@
       const points = (d.points || []).filter((t) => String(t).trim());
       const textW = hasImg && points.length ? W * 0.52 : W - 1000000;
       if (d.tableau && d.tableau.length) {
+        steps.push({ spid: shapeId, para: null, click: false });
+        builds += '<p:bldGraphic spid="' + shapeId + '" grpId="0"><p:bldAsOne/></p:bldGraphic>';
         tree += table(d.tableau, 500000, top, hasImg ? W * 0.55 : W - 1000000);
       } else if (points.length) {
         const size = points.length > 7 ? 1800 : points.length > 5 ? 2000 : 2400;
+        const bodyId = shapeId;
+        points.forEach((_, k) => steps.push({ spid: bodyId, para: k, click: true }));
+        builds += '<p:bldP spid="' + bodyId + '" grpId="0" build="p"/>';
         tree += textBox(500000, top, textW, bottom - top, points.map((t) => {
           const lvl = /^\s{2,}|^\s*[-–]\s/.test(t) ? 1 : 0;
           return { text: plain(String(t).replace(/^\s*[-–•]\s*/, '')), size: lvl ? size - 200 : size, bullet: true, level: lvl };
@@ -88,6 +123,7 @@
         const capH = d.legende ? 450000 : 0;
         const bx = points.length || (d.tableau && d.tableau.length) ? W * 0.58 : 800000;
         const bw = points.length || (d.tableau && d.tableau.length) ? W * 0.38 : W - 1600000;
+        steps.unshift({ spid: shapeId, para: null, click: false }); // l'image arrive en fondu à l'ouverture de la diapo
         tree += picture(imgRid, img, bx, top, bw, bottom - top - capH);
         if (d.legende) tree += textBox(bx, bottom - capH, bw, capH, [{ text: d.legende, size: 1100, italic: true, color: GREY, align: 'ctr' }]);
       }
@@ -95,7 +131,8 @@
     if (d.type !== 'titre') tree += textBox(W - 2200000, H - 420000, 1900000, 350000, [{ text: num + ' / ' + total, size: 1100, color: GREY, align: 'r' }]);
     return HEAD + '<p:sld ' + NS + '><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>' +
       '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
-      tree + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+      tree + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>' +
+      (animate ? '<p:transition spd="med"><p:fade/></p:transition>' + timing(steps, builds) : '') + '</p:sld>';
   }
 
   // ---------------- Pièces fixes du fichier ----------------
@@ -119,8 +156,10 @@
     list.map((r) => '<Relationship Id="' + r[0] + '" Type="' + REL + r[1] + '" Target="' + r[2] + '"/>').join('') + '</Relationships>';
 
   // slides : liste de diapos ; images : { index de diapo : {bytes, ext, w, h} }
-  function pptx(slides, images) {
+  // opts.animations : false pour une présentation sans animation (true par défaut)
+  function pptx(slides, images, opts) {
     images = images || {};
+    const animate = !opts || opts.animations !== false;
     const n = slides.length;
     const files = [
       {
@@ -155,7 +194,7 @@
         r.push(['rId2', 'image', '../media/' + name]);
         files.push({ name: 'ppt/media/' + name, data: img.bytes });
       }
-      files.push({ name: 'ppt/slides/slide' + (i + 1) + '.xml', data: slideXml(d, i + 1, n, 'rId2', img) });
+      files.push({ name: 'ppt/slides/slide' + (i + 1) + '.xml', data: slideXml(d, i + 1, n, 'rId2', img, animate) });
       files.push({ name: 'ppt/slides/_rels/slide' + (i + 1) + '.xml.rels', data: rels(r) });
     });
     return window.Files.zip(files);

@@ -94,7 +94,7 @@
       const ppt = f.kind === 'pptx';
       const card = el('div', { class: 'file-card' }, '<div class="doc-icon ' + (ppt ? 'ppt">PPT' : 'xl">XLS') + '</div><div class="grow"><div class="doc-name">' + esc(f.name) + '</div><div class="muted small">' +
         (ppt ? 'Présentation PowerPoint · ' + f.spec.length + ' diapos' : 'Tableur Excel avec formules') + '</div></div>');
-      card.appendChild(el('button', { class: 'btn small-btn', onclick: () => (ppt ? Exports.slides(f.name, f.spec) : Exports.xlsx(f.name, f.spec)) }, 'Enregistrer'));
+      card.appendChild(el('button', { class: 'btn small-btn', onclick: () => (ppt ? Exports.slides(f.name, f.spec, f.animations) : Exports.xlsx(f.name, f.spec)) }, 'Enregistrer'));
       wrap.appendChild(card);
     });
     if (m.sources && m.sources.length) {
@@ -116,6 +116,14 @@
       btn('📄 PDF', () => Exports.pdf(idx));
     }
     wrap.appendChild(acts);
+  }
+
+  // Plein écran d'une image ou d'un schéma (pour projeter en classe)
+  function openViewer(src, caption) {
+    const v = el('div', { class: 'viewer' }, '<img src="' + src.replace(/"/g, '&quot;') + '" alt="">' + (caption ? '<div class="viewer-cap"></div>' : '') + '<button class="viewer-close" aria-label="Fermer">✕</button>');
+    if (caption) $('.viewer-cap', v).textContent = caption;
+    v.addEventListener('click', () => v.remove());
+    document.body.appendChild(v);
   }
 
   function renderMessages(keepScroll) {
@@ -324,12 +332,12 @@
         lignes: r.map((line, ri) => (ri === 0 ? line.map((c) => c.replace(/\*\*/g, '')) : line.map(window.Files.smartCell)))
       })));
     },
-    async slides(name, spec) {
+    async slides(name, spec, animations) {
       try {
         const slides = JSON.parse(JSON.stringify(spec));
         if (slides.some((d) => d.image || d.schema_svg)) toast('Préparation des images…');
         const images = await window.Slides.loadSlideImages(slides, M.net.bytes, Chats.current.credits || {});
-        P.saveFile(name, MIME.pptx, window.Slides.pptx(slides, images), 'Présentation');
+        P.saveFile(name, MIME.pptx, window.Slides.pptx(slides, images, { animations: animations !== false }), 'Présentation');
       } catch (e) { toast('PowerPoint impossible : ' + e.message, 4000); }
     },
     slidesFromAnswer(idx) {
@@ -591,6 +599,8 @@
 
   // Bouton retour d'Android : ferme ce qui est ouvert, revient à la discussion
   window.__onBack = function () {
+    const viewer = $('.viewer');
+    if (viewer) { viewer.remove(); return true; }
     if (state.speakingIdx != null) { stopSpeaking(); renderMessages(true); return true; }
     if ($('#modal').classList.contains('open')) { closeModal(false); return true; }
     const sheets = $$('.sheet.open').filter((x) => x.id !== 'sheet-welcome' || Settings.key);
@@ -691,6 +701,14 @@
     }));
     on('#modal-ok', 'click', () => closeModal(true));
     on('#modal-cancel', 'click', () => closeModal(false));
+
+    // Toucher une image ou un schéma : plein écran
+    on('#messages', 'click', (e) => {
+      const img = e.target.closest('.bubble figure img');
+      if (!img) return;
+      const cap = img.parentElement.querySelector('figcaption');
+      openViewer(img.getAttribute('src'), cap ? cap.textContent : '');
+    });
 
     // Liens externes : navigateur du téléphone ou nouvel onglet
     document.addEventListener('click', (e) => {

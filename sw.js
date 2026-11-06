@@ -1,5 +1,5 @@
 // Manaen : fonctionnement hors connexion de l'interface (les réponses demandent Internet).
-const CACHE = 'manaen-v5';
+const CACHE = 'manaen-v6';
 const FILES = ['./', './index.html', './app.css', './manifest.webmanifest',
   './js/markdown.js', './js/files.js', './js/slides.js', './js/core.js', './js/store.js', './js/api.js', './js/brain.js',
   './js/ingest.js', './js/voice.js', './js/ui.js', './js/main.js',
