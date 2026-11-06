@@ -88,11 +88,13 @@
   }
 
   function renderAssistantMessage(m, idx, wrap) {
-    wrap.appendChild(el('div', { class: 'bubble' }, m.error ? '⚠️ ' + esc(m.text) : window.MD.render(m.text)));
+    wrap.appendChild(el('div', { class: 'bubble' }, m.error ? '⚠️ ' + esc(m.text) : window.MD.render(m.text, { credits: Chats.current.credits })));
     (m.mem || []).forEach((t) => wrap.appendChild(el('div', { class: 'mem-chip' }, '🧠 ' + esc(t))));
     (m.files || []).forEach((f) => {
-      const card = el('div', { class: 'file-card' }, '<div class="doc-icon xl">XLS</div><div class="grow"><div class="doc-name">' + esc(f.name) + '</div><div class="muted small">Tableur Excel avec formules</div></div>');
-      card.appendChild(el('button', { class: 'btn small-btn', onclick: () => Exports.xlsx(f.name, f.spec) }, 'Enregistrer'));
+      const ppt = f.kind === 'pptx';
+      const card = el('div', { class: 'file-card' }, '<div class="doc-icon ' + (ppt ? 'ppt">PPT' : 'xl">XLS') + '</div><div class="grow"><div class="doc-name">' + esc(f.name) + '</div><div class="muted small">' +
+        (ppt ? 'Présentation PowerPoint · ' + f.spec.length + ' diapos' : 'Tableur Excel avec formules') + '</div></div>');
+      card.appendChild(el('button', { class: 'btn small-btn', onclick: () => (ppt ? Exports.slides(f.name, f.spec) : Exports.xlsx(f.name, f.spec)) }, 'Enregistrer'));
       wrap.appendChild(card);
     });
     if (m.sources && m.sources.length) {
@@ -110,6 +112,7 @@
       btn('Copier', () => copyText(m.text));
       if (window.Files.tablesFromMarkdown(m.text).length) btn('📊 Excel', () => Exports.tables(idx));
       btn('📝 Word', () => Exports.word(idx));
+      btn('📽 PowerPoint', () => Exports.slidesFromAnswer(idx));
       btn('📄 PDF', () => Exports.pdf(idx));
     }
     wrap.appendChild(acts);
@@ -194,6 +197,7 @@
     let speakIdx = null;
     try {
       const r = await M.brain.respond(conv, content, { voice: voiceMode, onStatus: status.set, isCancelled: () => state.cancelled });
+      conv.credits = Object.assign(conv.credits || {}, r.credits);
       conv.display.push({ role: 'assistant', text: r.text, mem: r.mem, sources: r.sources, files: r.files });
       if (voiceMode && !r.cancelled) speakIdx = conv.display.length - 1;
       if (r.mem.length && state.view === 'memory') renderMemory();
@@ -294,7 +298,8 @@
   // ---------------- Exports ----------------
   const MIME = {
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
   };
   const fileSafe = (t) => t.replace(/[\\/:*?"<>|…]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Manaen';
 
@@ -319,13 +324,31 @@
         lignes: r.map((line, ri) => (ri === 0 ? line.map((c) => c.replace(/\*\*/g, '')) : line.map(window.Files.smartCell)))
       })));
     },
-    word(idx) {
+    async slides(name, spec) {
+      try {
+        const slides = JSON.parse(JSON.stringify(spec));
+        if (slides.some((d) => d.image || d.schema_svg)) toast('Préparation des images…');
+        const images = await window.Slides.loadSlideImages(slides, M.net.bytes, Chats.current.credits || {});
+        P.saveFile(name, MIME.pptx, window.Slides.pptx(slides, images), 'Présentation');
+      } catch (e) { toast('PowerPoint impossible : ' + e.message, 4000); }
+    },
+    slidesFromAnswer(idx) {
       const t = titleFor(idx);
-      try { P.saveFile(fileSafe(t) + '.docx', MIME.docx, window.Files.docx(t, Chats.current.display[idx].text), 'Document'); } catch (e) { toast('Word impossible : ' + e.message, 4000); }
+      this.slides(fileSafe(t) + '.pptx', window.Slides.fromMarkdown(t, Chats.current.display[idx].text));
+    },
+    async word(idx) {
+      const t = titleFor(idx);
+      const md = Chats.current.display[idx].text;
+      try {
+        const hasPictures = window.Files.blocks(md).some((b) => b.t === 'image' || b.t === 'svg');
+        if (hasPictures) toast('Préparation des images…');
+        const images = hasPictures ? await window.Files.loadImages(md, M.net.bytes) : {};
+        P.saveFile(fileSafe(t) + '.docx', MIME.docx, window.Files.docx(t, md, { images, credits: Chats.current.credits || {} }), 'Document');
+      } catch (e) { toast('Word impossible : ' + e.message, 4000); }
     },
     pdf(idx) {
       const t = titleFor(idx);
-      const html = window.Files.printHtml(t, Chats.current.display[idx].text);
+      const html = window.Files.printHtml(t, Chats.current.display[idx].text, Chats.current.credits || {});
       if (P.isNative()) {
         toast('Choisis « Enregistrer au format PDF » en haut', 3500);
         window.ManaenNative.printHtml(html, fileSafe(t));

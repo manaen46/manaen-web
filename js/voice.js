@@ -8,7 +8,7 @@
   function speechText(md) {
     return window.Files.blocks(md).map((b) => {
       if (b.t === 'table') return b.rows.slice(1).map((r) => r.map((c, k) => (b.rows[0][k] ? b.rows[0][k] + ' : ' : '') + c).join(', ')).join('. ');
-      return b.t === 'code' ? '' : b.text;
+      return b.t === 'code' || b.t === 'svg' || b.t === 'image' ? '' : b.text;
     }).join('.\n')
       .replace(/\*\*|__|`|~~|#+\s/g, '').replace(/\*([^*]+)\*/g, '$1')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')

@@ -54,7 +54,15 @@ Les **bases des pourcentages changent selon les formations** : par ex. FC en % d
 
 # Fichiers Excel
 Quand un tableau de calcul serait utile en fichier (chiffrage, Kv, quantitatif, métré, DQE, DPGF, bilan, planning, grille d'évaluation, notes…), ou si Franck le demande, appelle l'outil \`creer_tableur\`. Mets de **vraies formules Excel** pour que le fichier se recalcule s'il change une valeur : syntaxe anglaise (SUM, ROUND, IF, PRODUCT), séparateur virgule, point décimal, références A1 (ex. "=C2*D2", "=SUM(E2:E9)", "=ROUND(B12/B2,3)"). Ligne 1 = en-têtes. Formats possibles par cellule : {"v": …, "format": "euro" | "pourcent" | "nombre", "gras": true}. Un pourcentage s'écrit en décimal (0.12 avec format pourcent). Vérifie que chaque référence pointe sur la bonne cellule. Reste raisonnable en taille (quelques centaines de lignes au plus ; sinon plusieurs fichiers). Montre aussi le résultat dans ta réponse.
-Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou en PDF, et en Excel s'il y a des tableaux : pour un cours, une fiche ou un rapport, rédige proprement en Markdown (titres, listes, tableaux) pour que l'export soit propre.{{WEB}}{{CONSIGNES}}`;
+Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou en PDF, et en Excel s'il y a des tableaux : pour un cours, une fiche ou un rapport, rédige proprement en Markdown (titres, listes, tableaux) pour que l'export soit propre.
+
+# Images et schémas (pour les cours, fiches, présentations)
+Quand une image aide vraiment à comprendre (cours, fiche élève, présentation de matériel), illustre — mais pas dans les réponses courantes.
+- **Photos réelles** (compresseur, détendeur, unité VRV, outillage, brasage…) : appelle \`chercher_image\` avec des mots-clés **en anglais** (la banque d'images est surtout en anglais, ex. "scroll compressor", "thermostatic expansion valve", "refrigerant manifold gauge"). Tu reçois des miniatures : **regarde-les** et ne garde que celles qui montrent vraiment le bon matériel, nettes et lisibles. Insère-les sur une ligne seule : ![Légende courte en français](adresse exacte fournie). N'utilise jamais d'autre adresse que celles fournies par l'outil. Le crédit de l'auteur est ajouté automatiquement sous l'image. 1 à 3 photos par cours suffisent.
+- **Schémas de principe** (cycle frigorifique, schéma hydraulique, raccordement, diagramme simple) : dessine-les toi-même dans un bloc \`\`\`svg. Règles : viewBox="0 0 800 500" (ou plus haut si besoin), un rectangle de fond blanc, traits nets, flèches pour le sens de circulation, couleurs sobres (bleu = froid/BP, rouge/orange = chaud/HP), légendes en français, police sans-serif de 16 px au moins, aucun script, aucune image ni lien externe. Reste simple et juste techniquement.
+
+# Présentations PowerPoint
+Quand Franck demande un diaporama, une présentation ou des diapos, appelle \`creer_presentation\` : une diapo de titre, puis une idée par diapo, 3 à 6 points courts par diapo (pas de phrases longues), une photo (adresse obtenue avec \`chercher_image\`) ou un schéma SVG quand ça aide, un tableau si utile. Visé : 6 à 15 diapos. Dans ta réponse, résume simplement le plan. (Sous chaque réponse, il a aussi un bouton qui transforme le texte en diapos.){{WEB}}{{CONSIGNES}}`;
 
   const TXT = {
     autoOn: 'Sans qu\'il le demande, mémorise aussi les infos **durables et utiles** qu\'il donne : ses habitudes de travail, ses préférences de réponse, ses chantiers et clients en cours, le matériel qu\'il utilise, ses classes et cours, ses méthodes et valeurs de réglage. Ne mémorise pas les détails ponctuels d\'une seule question, ni ce que tu as toi-même expliqué.',
@@ -114,6 +122,46 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
       }
     },
     {
+      name: 'chercher_image',
+      description: 'Cherche des photos réelles libres de droits sur Wikimedia Commons (matériel CVC, froid, plomberie, outillage…). Renvoie jusqu\'à 4 miniatures que tu peux voir, avec l\'adresse à utiliser pour les insérer dans ta réponse.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          requete: { type: 'string', description: 'Mots-clés de préférence en anglais, précis (ex. "scroll compressor", "brazed plate heat exchanger").' },
+          nombre: { type: 'integer', description: 'Nombre de miniatures à voir (1 à 4, 4 par défaut).' }
+        },
+        required: ['requete']
+      }
+    },
+    {
+      name: 'creer_presentation',
+      description: 'Crée une présentation PowerPoint (.pptx, 16:9) que Franck peut enregistrer et projeter.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          nom_fichier: { type: 'string', description: 'Nom du fichier sans extension' },
+          diapos: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['titre', 'contenu'], description: '« titre » pour la diapo de couverture' },
+                titre: { type: 'string' },
+                sous_titre: { type: 'string', description: 'Diapo de titre seulement' },
+                points: { type: 'array', items: { type: 'string' }, description: 'Points courts ; commencer par « - » pour un sous-point' },
+                image: { type: 'string', description: 'Adresse d\'une photo donnée par chercher_image' },
+                legende: { type: 'string', description: 'Légende de la photo ou du schéma' },
+                schema_svg: { type: 'string', description: 'Schéma SVG complet (mêmes règles que les schémas)' },
+                tableau: { type: 'array', items: { type: 'array', items: { type: 'string' } }, description: 'Tableau : 1re ligne = en-têtes' }
+              },
+              required: ['titre']
+            }
+          }
+        },
+        required: ['nom_fichier', 'diapos']
+      }
+    },
+    {
       name: 'creer_tableur',
       description: 'Crée un fichier Excel (.xlsx) avec de vraies formules, que Franck peut ouvrir et enregistrer. Pour chiffrages, Kv, quantitatifs, DQE/DPGF, métrés, bilans, grilles d\'évaluation, notes d\'élèves…',
       input_schema: {
@@ -155,8 +203,70 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     memoriser: () => 'Je retiens ça…',
     corriger_memoire: () => 'Je mets à jour ma mémoire…',
     rechercher_documents: (i) => 'Je cherche dans tes documents : ' + (i.requete || ''),
-    creer_tableur: () => 'Je prépare le fichier Excel…'
+    creer_tableur: () => 'Je prépare le fichier Excel…',
+    chercher_image: (i) => 'Je cherche des images : ' + (i.requete || ''),
+    creer_presentation: () => 'Je prépare la présentation PowerPoint…'
   };
+
+  // ================= Recherche d'images (Wikimedia Commons) =================
+  const stripHtml = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+
+  // Miniature JPEG (base64) pour que le cerveau voie l'image avant de la choisir
+  async function miniature(url) {
+    const blobUrl = URL.createObjectURL(new Blob([await M.net.bytes(url)]));
+    try {
+      return await new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => {
+          const k = Math.min(1, 384 / Math.max(img.naturalWidth, img.naturalHeight));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          res(c.toDataURL('image/jpeg', 0.75).split(',')[1]);
+        };
+        img.onerror = () => rej(new Error('miniature illisible'));
+        img.src = blobUrl;
+      });
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  }
+
+  async function searchImages(query, count, turn) {
+    const api = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=12' +
+      '&prop=imageinfo&iiprop=url|extmetadata|mime|size&iiurlwidth=1000&gsrsearch=' + encodeURIComponent('filetype:bitmap ' + query);
+    const data = await M.net.json(api);
+    const pages = Object.values((data.query && data.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+    const found = [];
+    for (const p of pages) {
+      const ii = p.imageinfo && p.imageinfo[0];
+      if (!ii || !/image\/(jpeg|png)/.test(ii.mime) || ii.width < 300) continue;
+      const meta = ii.extmetadata || {};
+      const url = String(ii.thumburl || ii.url).split('?')[0];
+      if (!window.MD.imageAllowed(url)) continue;
+      const author = stripHtml(meta.Artist && meta.Artist.value).slice(0, 80) || 'auteur inconnu';
+      const license = stripHtml(meta.LicenseShortName && meta.LicenseShortName.value) || 'licence libre';
+      found.push({
+        url, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''),
+        desc: stripHtml(meta.ImageDescription && meta.ImageDescription.value).slice(0, 200),
+        credit: 'Photo : ' + author + ' — ' + license + ' — Wikimedia Commons'
+      });
+      if (found.length >= Math.max(1, Math.min(4, count || 4))) break;
+    }
+    if (!found.length) return 'Aucune photo trouvée pour « ' + query + ' ». Essaie d\'autres mots-clés en anglais, plus simples.';
+    const content = [{ type: 'text', text: 'Photos trouvées pour « ' + query + ' ». Regarde-les et n\'insère que celles qui conviennent, avec ![légende](adresse) sur une ligne seule.' }];
+    for (let k = 0; k < found.length; k++) {
+      const f = found[k];
+      turn.credits[f.url] = f.credit;
+      content.push({ type: 'text', text: '[' + (k + 1) + '] ' + f.title + (f.desc ? ' — ' + f.desc : '') + '\nAdresse : ' + f.url });
+      try { content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await miniature(f.url) } }); }
+      catch (e) { content.push({ type: 'text', text: '(miniature indisponible)' }); }
+    }
+    return content;
+  }
 
   // Exécute un outil demandé par le cerveau ; `turn` collecte ce qu'il faut afficher ensuite.
   async function runTool(name, input, turn) {
@@ -182,6 +292,18 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
           turn.mem.push('Corrigé : ' + it.text);
           return 'Corrigé.';
         }
+        case 'creer_presentation': {
+          const diapos = Array.isArray(input.diapos) ? input.diapos.filter((d) => d && d.titre) : [];
+          if (!diapos.length) return 'Erreur : aucune diapo fournie.';
+          const nom = String(input.nom_fichier || 'Présentation Manaen').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'Présentation Manaen';
+          const bad = diapos.filter((d) => d.image && !window.MD.imageAllowed(d.image)).length;
+          diapos.forEach((d) => { if (d.image && !window.MD.imageAllowed(d.image)) delete d.image; });
+          turn.files.push({ kind: 'pptx', name: nom + '.pptx', spec: diapos });
+          return 'Présentation « ' + nom + '.pptx » créée (' + diapos.length + ' diapos). Franck a un bouton sous ta réponse pour l\'enregistrer.' +
+            (bad ? ' Attention : ' + bad + ' image(s) refusée(s), seules les adresses données par chercher_image sont acceptées.' : '');
+        }
+        case 'chercher_image':
+          return await searchImages(String(input.requete || ''), input.nombre, turn);
         case 'rechercher_documents': {
           if (!Docs.list.length) return 'Franck n\'a encore ajouté aucun document.';
           const r = Docs.search(input.requete, 6);
@@ -295,6 +417,10 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
             if (b.type === 'document') return { type: 'text', text: '[PDF joint à ce message' + (b.title ? ' : ' + b.title : '') + ']' };
             if (b.type === 'text' && b.text.startsWith(EXCERPT_TAG)) return { type: 'text', text: '[Extraits de ses documents fournis pour cette question]' };
             if (b.type === 'text' && b.text.startsWith(VOICE_TAG)) return { type: 'text', text: '[Question dictée à la voix]' };
+            if (b.type === 'tool_result' && Array.isArray(b.content)) {
+              const txt = b.content.filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+              return Object.assign({}, b, { content: txt.slice(0, 1500) + (txt.length > 1500 ? '…' : '') });
+            }
             if (b.type === 'tool_result' && typeof b.content === 'string' && b.content.length > 1500) {
               return Object.assign({}, b, { content: b.content.slice(0, 600) + '\n[… extraits raccourcis : relance rechercher_documents si besoin]' });
             }
@@ -312,6 +438,10 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
               if (b.type === 'text' && b.citations) { const c = Object.assign({}, b); delete c.citations; return c; }
               if (b.type === 'tool_use' && b.name === 'creer_tableur') {
                 return Object.assign({}, b, { input: { nom_fichier: (b.input && b.input.nom_fichier) || 'Tableau', feuilles: '[fichier créé et remis à Franck]' } });
+              }
+              if (b.type === 'tool_use' && b.name === 'creer_presentation') {
+                const titles = ((b.input && b.input.diapos) || []).map((d) => d && d.titre).filter(Boolean);
+                return Object.assign({}, b, { input: { nom_fichier: (b.input && b.input.nom_fichier) || 'Présentation', diapos: '[présentation créée et remise à Franck : ' + titles.join(' | ').slice(0, 600) + ']' } });
               }
               return b;
             })
@@ -357,7 +487,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
     const status = opts.onStatus || (() => {});
     const cancelled = opts.isCancelled || (() => false);
     const question = content.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
-    const turn = { texts: [], mem: [], sources: [], files: [] };
+    const turn = { texts: [], mem: [], sources: [], files: [], credits: {} };
 
     // Extraits de documents ajoutés d'office à la question si elle y ressemble (allégés ensuite)
     const extra = [];
@@ -465,7 +595,7 @@ Sous chacune de tes réponses, Franck a des boutons pour l'exporter en Word ou e
       compactTurn(conv, qIndex);
       return {
         text: (text + (wasCancelled ? '\n\n*(interrompu)*' : '')).trim() || '(pas de réponse)',
-        mem: turn.mem, sources: turn.sources.slice(0, 8), files: turn.files, cancelled: wasCancelled
+        mem: turn.mem, sources: turn.sources.slice(0, 8), files: turn.files, credits: turn.credits, cancelled: wasCancelled
       };
     } catch (e) {
       conv.api.splice(qIndex); // on retire le tour : la question pourra être renvoyée

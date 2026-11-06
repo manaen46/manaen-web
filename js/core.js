@@ -111,6 +111,44 @@
     fmtNum: (n) => Math.round(n).toLocaleString('fr-FR')
   };
 
+  // ---------------- Téléchargements (images, recherche d'images) ----------------
+  // D'abord par le navigateur ; si c'est bloqué, par le téléphone (code Java, sans restriction).
+  const waiters = {};
+  window.__nativeFetch = function (id, status, data) {
+    const w = waiters[id];
+    if (!w) return;
+    delete waiters[id];
+    w({ status, data });
+  };
+  function nativeGet(url, binary) {
+    return new Promise((resolve) => {
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      waiters[id] = resolve;
+      window.ManaenNative.fetchUrl(id, url, !!binary);
+    });
+  }
+  async function get(url, binary) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return binary ? new Uint8Array(await r.arrayBuffer()) : await r.text();
+    } catch (e) { /* bloqué : on essaie par le téléphone */ }
+    if (window.ManaenNative && window.ManaenNative.fetchUrl) {
+      const r = await nativeGet(url, binary);
+      if (r.status >= 200 && r.status < 300) {
+        if (!binary) return r.data;
+        const bin = atob(r.data);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+    }
+    throw new Error('Téléchargement impossible (connexion ?)');
+  }
+  M.net = {
+    bytes: (url) => get(url, true),
+    json: async (url) => JSON.parse(await get(url, false))
+  };
+
   // ---------------- Plateforme : appli Android ou navigateur ----------------
   // Dans l'appli, le code Java expose window.ManaenNative et rappelle les fonctions window.__on*.
   const N = () => window.ManaenNative;

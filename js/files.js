@@ -234,14 +234,17 @@
     while (i < lines.length) {
       const l = lines[i];
       if (/^\s*```/.test(l)) {
+        const lang = (l.match(/^\s*```\s*(\w*)/) || [0, ''])[1].toLowerCase();
         const buf = []; i++;
         while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
         i++;
-        out.push({ t: 'code', text: buf.join('\n') });
+        out.push(lang === 'svg' ? { t: 'svg', svg: buf.join('\n') } : { t: 'code', text: buf.join('\n') });
         continue;
       }
       if (/^\s*$/.test(l)) { i++; continue; }
-      let m = l.match(/^(#{1,6})\s+(.*)$/);
+      let m = l.match(/^\s*!\[([^\]]*)\]\(([^\s)]+)\)\s*$/);
+      if (m) { out.push({ t: 'image', alt: m[1], url: m[2] }); i++; continue; }
+      m = l.match(/^(#{1,6})\s+(.*)$/);
       if (m) { out.push({ t: 'h', level: m[1].length, text: m[2] }); i++; continue; }
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { i++; continue; }
       if (l.indexOf('|') !== -1 && i + 1 < lines.length && isSep(lines[i + 1])) {
@@ -313,7 +316,86 @@
     return '<w:p><w:pPr>' + ppr + '</w:pPr>' + content + '</w:p>';
   }
 
-  function docx(title, md) {
+  // ---------------- Images pour Word ----------------
+  // Prépare les images d'une réponse : photos téléchargées (fetchBytes) et schémas SVG convertis en PNG.
+  // Renvoie { clé : {bytes, ext, w, h} } avec clé = url de la photo, ou « svg:N » pour le N-ième schéma.
+  function rasterize(src, scale, mime) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth || 800, h = img.naturalHeight || 500;
+        const k = Math.min(scale, 1600 / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const b64 = c.toDataURL(mime, 0.88).split(',')[1];
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        res({ bytes, ext: mime === 'image/png' ? 'png' : 'jpeg', w: c.width, h: c.height });
+      };
+      img.onerror = () => rej(new Error('image illisible'));
+      img.src = src;
+    });
+  }
+
+  // Une image prête à intégrer : {url} (photo) ou {svg} (schéma) → {bytes, ext, w, h}
+  async function prepareImage(src, fetchBytes) {
+    if (src.svg) {
+      // Sans largeur/hauteur, le navigateur dessinerait le schéma en 300 × 150 : on les déduit du viewBox
+      let svg = src.svg;
+      const vb = svg.match(/viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/);
+      if (vb && !/<svg[^>]*\swidth\s*=/.test(svg)) svg = svg.replace(/<svg\b/, '<svg width="' + vb[1] + '" height="' + vb[2] + '"');
+      return rasterize(window.MD.svgDataUrl(svg), 2, 'image/png');
+    }
+    if (!window.MD.imageAllowed(src.url)) throw new Error('image non autorisée');
+    const blobUrl = URL.createObjectURL(new Blob([await fetchBytes(src.url)]));
+    try { return await rasterize(blobUrl, 1, 'image/jpeg'); } finally { URL.revokeObjectURL(blobUrl); }
+  }
+
+  async function loadImages(md, fetchBytes) {
+    const out = {};
+    let n = 0;
+    for (const b of blocks(md)) {
+      try {
+        if (b.t === 'svg') out['svg:' + n++] = await prepareImage({ svg: b.svg }, fetchBytes);
+        else if (b.t === 'image' && !out[b.url]) out[b.url] = await prepareImage({ url: b.url }, fetchBytes);
+      } catch (e) { /* image indisponible : une mention la remplacera */ }
+    }
+    return out;
+  }
+
+  function drawing(rid, id, w, h) {
+    const maxW = 5760000; // 16 cm
+    const cx = Math.min(maxW, Math.round(w * 9525)), cy = Math.round(cx * h / w);
+    const ext = '<a:ext cx="' + cx + '" cy="' + cy + '"/>';
+    return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+      '<wp:docPr id="' + id + '" name="Image ' + id + '"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+      '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:nvPicPr><pic:cNvPr id="' + id + '" name="image' + id + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
+      '<pic:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/>' + ext + '</a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+      '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+  }
+
+  // opts : {images : résultat de loadImages, credits : {url : crédit}}
+  function docx(title, md, opts) {
+    opts = opts || {};
+    const images = opts.images || {};
+    const credits = opts.credits || {};
+    const media = [];   // fichiers image à ranger dans word/media
+    let svgN = 0;
+    const center = (content, after) => '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="' + (after || 60) + '"/></w:pPr>' + content + '</w:p>';
+    const placeImage = (img, caption) => {
+      const rid = 'rIdImg' + (media.length + 1);
+      media.push({ rid, img, name: 'image' + (media.length + 1) + '.' + img.ext });
+      let out = center(drawing(rid, media.length, img.w, img.h), caption ? 20 : 160);
+      if (caption) out += center(runs(caption, { color: '666666', sz: 18 }), 160);
+      return out;
+    };
     let body = '';
     if (title) body += para(runs(title, { b: true, sz: 36, color: '1F4E79' }), { after: 240 });
     const bl = blocks(md);
@@ -329,6 +411,13 @@
         body += para(runs(bullet + b.text), { ind: b.sub ? 1080 : 540, hanging: 270, after: 60 });
       } else if (b.t === 'quote') {
         body += para(runs(b.text, { color: '444444' }), { border: 'F97316', ind: 200 });
+      } else if (b.t === 'image') {
+        const img = images[b.url];
+        const caption = [b.alt, credits[b.url]].filter(Boolean).join(' — ');
+        body += img ? placeImage(img, caption) : para(runs('[Image : ' + (b.alt || 'photo') + ' — visible dans la version PDF]', { color: '888888' }));
+      } else if (b.t === 'svg') {
+        const img = images['svg:' + svgN++];
+        if (img) body += placeImage(img, '');
       } else if (b.t === 'code') {
         body += para('<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">' + x(b.text).replace(/\n/g, '</w:t><w:br/><w:t xml:space="preserve">') + '</w:t></w:r>', { shade: 'F2F2F2' });
       } else if (b.t === 'table') {
@@ -353,7 +442,8 @@
       }
     });
     const doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>' + body +
       '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>';
     const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
       '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:lang w:val="fr-FR"/></w:rPr></w:rPrDefault></w:docDefaults>' +
@@ -363,18 +453,23 @@
         name: '[Content_Types].xml',
         data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
           '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+          '<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
           '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
           '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>'
       },
       { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
-      { name: 'word/_rels/document.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+      {
+        name: 'word/_rels/document.xml.rels',
+        data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+          media.map((m) => '<Relationship Id="' + m.rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + m.name + '"/>').join('') + '</Relationships>'
+      },
       { name: 'word/document.xml', data: doc },
       { name: 'word/styles.xml', data: styles }
-    ]);
+    ].concat(media.map((m) => ({ name: 'word/media/' + m.name, data: m.img.bytes }))));
   }
 
   // ---------------- PDF (page imprimable) ----------------
-  function printHtml(title, md) {
+  function printHtml(title, md, credits) {
     md = String(md || '').replace(/^\s*#{1,6}\s+(.+)\n/, (all, h) => (h.replace(/[*_`]/g, '').trim() === title ? '' : all));
     return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + x(title) + '</title><style>' +
       '@page{size:A4;margin:16mm}body{font-family:Calibri,Roboto,Arial,sans-serif;font-size:11pt;color:#1a1a1a;line-height:1.45}' +
@@ -385,7 +480,9 @@
       'code{background:#f2f2f2;padding:0 3px;border-radius:3px}pre{background:#f2f2f2;padding:8px;white-space:pre-wrap}' +
       'blockquote{border-left:3px solid #F97316;margin:6px 0;padding:2px 10px;color:#444}li.sub{margin-left:16px;list-style:circle}' +
       '.foot{margin-top:18px;font-size:8.5pt;color:#888;border-top:1px solid #ddd;padding-top:4px}a{color:#1F4E79}' +
-      '</style></head><body><h1 class="t">' + x(title) + '</h1>' + window.MD.render(md) +
+      'figure{margin:10px 0;text-align:center;page-break-inside:avoid}figure img{max-width:100%;max-height:110mm}' +
+      'figcaption{font-size:9pt;color:#555;margin-top:3px}figcaption .credit{display:block;font-size:8pt;color:#888}' +
+      '</style></head><body><h1 class="t">' + x(title) + '</h1>' + window.MD.render(md, { credits: credits || {} }) +
       '<div class="foot">Manaen · ' + new Date().toLocaleDateString('fr-FR') + '</div></body></html>';
   }
 
@@ -395,5 +492,5 @@
     return btoa(bin);
   }
 
-  window.Files = { zip, xlsx, docx, printHtml, blocks, tablesFromMarkdown, smartCell, toB64, crc32 };
+  window.Files = { zip, xlsx, docx, loadImages, prepareImage, printHtml, blocks, tablesFromMarkdown, smartCell, toB64, crc32 };
 })();
